@@ -4,11 +4,13 @@ const fs = require('fs').promises;
 const os = require('os');
 
 class ClaudeWrapper {
-  constructor() {
+  constructor(agentAlias = 'claude', workingDir = process.cwd()) {
+    this.agentAlias = agentAlias;
+    this.workingDir = path.resolve(workingDir);
     this.sessionMap = new Map();
     this.threadSessions = new Map(); // Maps thread_ts to session info
     this.userSessions = new Map(); // Maps user-channel to latest session
-    this.sessionDir = path.join(os.homedir(), '.claude-slack-bot-sessions');
+    this.sessionDir = path.join(os.homedir(), '.claude-slack-bot-sessions', agentAlias);
     this.initializeSessionStorage();
   }
 
@@ -28,7 +30,7 @@ class ClaudeWrapper {
 
       const claudeProcess = spawn('claude', args, {
         stdio: ['ignore', 'pipe', 'pipe'],
-        cwd: process.cwd(),
+        cwd: this.workingDir,
         env: { ...process.env, TERM: 'dumb' }
       });
 

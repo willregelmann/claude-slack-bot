@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "A Slack bot that wraps Claude Code CLI for team collaboration",
   "main": "src/index.js",
+  "bin": {
+    "claude-slack": "./bin/claude-slack.js"
+  },
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
@@ -10,7 +13,9 @@
   },
   "dependencies": {
     "@slack/bolt": "^3.17.1",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "commander": "^11.1.0",
+    "chalk": "^4.1.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.2",

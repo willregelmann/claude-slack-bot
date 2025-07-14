@@ -2,6 +2,10 @@ require('dotenv').config();
 const { App } = require('@slack/bolt');
 const ClaudeWrapper = require('./claude-wrapper');
 
+// Get agent configuration from environment
+const agentAlias = process.env.CLAUDE_AGENT_ALIAS || 'claude';
+const workingDir = process.env.CLAUDE_AGENT_WORKING_DIR || process.cwd();
+
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
@@ -9,7 +13,7 @@ const app = new App({
   socketMode: true,
 });
 
-const claudeWrapper = new ClaudeWrapper();
+const claudeWrapper = new ClaudeWrapper(agentAlias, workingDir);
 
 app.message(/^claude\s+(.*)/, async ({ message, say, context }) => {
   const prompt = context.matches[1];
@@ -31,13 +35,15 @@ app.message(/^claude\s+(.*)/, async ({ message, say, context }) => {
 
     let responseText = response.text || response;
     
-    // Add session info if available
+    // Add agent identification and session info
+    let footer = `\n\n_[${agentAlias}]_`;
     if (response.sessionId) {
-      responseText += `\n\n_Session: ${response.sessionId.substring(0, 8)}..._`;
+      footer += ` | _Session: ${response.sessionId.substring(0, 8)}..._`;
       if (response.cost) {
-        responseText += ` | _Cost: $${response.cost.toFixed(4)}_`;
+        footer += ` | _Cost: $${response.cost.toFixed(4)}_`;
       }
     }
+    responseText += footer;
 
     await say({
       text: responseText,
@@ -72,13 +78,15 @@ app.command('/claude', async ({ command, ack, respond }) => {
 
     let responseText = response.text || response;
     
-    // Add session info if available
+    // Add agent identification and session info
+    let footer = `\n\n_[${agentAlias}]_`;
     if (response.sessionId) {
-      responseText += `\n\n_Session: ${response.sessionId.substring(0, 8)}..._`;
+      footer += ` | _Session: ${response.sessionId.substring(0, 8)}..._`;
       if (response.cost) {
-        responseText += ` | _Cost: $${response.cost.toFixed(4)}_`;
+        footer += ` | _Cost: $${response.cost.toFixed(4)}_`;
       }
     }
+    responseText += footer;
 
     await respond(responseText);
   } catch (error) {
@@ -114,13 +122,15 @@ app.event('app_mention', async ({ event, say }) => {
 
     let responseText = response.text || response;
     
-    // Add session info if available
+    // Add agent identification and session info
+    let footer = `\n\n_[${agentAlias}]_`;
     if (response.sessionId) {
-      responseText += `\n\n_Session: ${response.sessionId.substring(0, 8)}..._`;
+      footer += ` | _Session: ${response.sessionId.substring(0, 8)}..._`;
       if (response.cost) {
-        responseText += ` | _Cost: $${response.cost.toFixed(4)}_`;
+        footer += ` | _Cost: $${response.cost.toFixed(4)}_`;
       }
     }
+    responseText += footer;
 
     await say({
       text: responseText,
@@ -148,7 +158,7 @@ app.message(/^(?:claude\s+)?session\s+(new|start)/, async ({ message, say }) => 
     });
 
     await say({
-      text: `🆕 Started a new Claude session!\n\n${response.text}\n\n_Session: ${response.sessionId.substring(0, 8)}..._`,
+      text: `🆕 Started a new Claude session!\n\n${response.text}\n\n_[${agentAlias}] | Session: ${response.sessionId.substring(0, 8)}..._`,
       thread_ts: threadTs
     });
   } catch (error) {
@@ -180,7 +190,7 @@ app.message(/^(?:claude\s+)?session\s+continue/, async ({ message, say }) => {
     }
 
     await say({
-      text: `🔄 Continuing your previous session (${status.sessionId.substring(0, 8)}...).\n\nWhat would you like me to help you with?`,
+      text: `🔄 Continuing your previous session (${status.sessionId.substring(0, 8)}...).\n\nWhat would you like me to help you with?\n\n_[${agentAlias}]_`,
       thread_ts: threadTs
     });
   } catch (error) {
@@ -325,8 +335,10 @@ app.message(/^(?:claude\s+)?session\s+clear/, async ({ message, say }) => {
 
 (async () => {
   try {
-    await app.start(process.env.PORT || 3000);
-    console.log('⚡️ Claude Slack Bot is running!');
+    const port = process.env.PORT || 3000;
+    await app.start(port);
+    console.log(`⚡️ Claude Slack Bot "${agentAlias}" is running on port ${port}!`);
+    console.log(`📁 Working directory: ${workingDir}`);
   } catch (error) {
     console.error('Failed to start the bot:', error);
     process.exit(1);

@@ -1,14 +1,17 @@
 # Claude Slack Bot
 
-A Slack bot that wraps Claude Code CLI, allowing teams to interact with Claude directly through Slack channels.
+A multi-agent Slack bot system that wraps Claude Code CLI, allowing teams to run multiple specialized Claude assistants for different projects and directories.
 
 ## Features
 
-- **Multiple interaction methods**: Mention the bot, use slash commands, or send direct messages
-- **Smart code formatting**: Automatically detects and formats code snippets
-- **Thread responses**: Keeps conversations organized in threads
-- **Error handling**: Graceful error messages and timeouts
-- **Per-user context**: Maintains separate contexts for different users and channels
+- **Multi-Agent Architecture**: Run multiple Claude assistants for different projects/directories
+- **Simple CLI Management**: Start, stop, and manage agents with `claude-slack` command
+- **Directory Isolation**: Each agent operates in its own working directory
+- **Process Management**: Independent processes with monitoring and logging
+- **Session Isolation**: Separate conversation contexts per agent
+- **Multiple Interaction Methods**: Mention bots, use slash commands, or send direct messages
+- **Smart Code Formatting**: Automatically detects and formats code snippets
+- **Thread Responses**: Keeps conversations organized in threads
 
 ## Setup
 
@@ -72,31 +75,45 @@ SLACK_APP_TOKEN=xapp-your-slack-app-token
 PORT=3000
 ```
 
-## Usage
+## Quick Start
 
-### Methods to interact with Claude:
+### Start Multiple Agents
 
-1. **Mention the bot**:
-   ```
-   @claude-bot help me debug this function
-   ```
+```bash
+# Install dependencies
+npm install
 
-2. **Use the slash command**:
-   ```
-   /claude write a Python function to sort a list
-   ```
+# Start agents for different projects
+claude-slack start --alias="frontend" --dir="/path/to/react-app" --port=3001
+claude-slack start --alias="backend" --dir="/path/to/api" --port=3002
+claude-slack start --alias="home" --dir="~" --port=3003
 
-3. **Direct message starting with "claude"**:
-   ```
-   claude explain this error message
-   ```
+# List running agents
+claude-slack list
 
-### Response Format
+# View agent status
+claude-slack status frontend
+```
 
-- Code snippets are automatically formatted with syntax highlighting
-- Long responses are truncated with a note
-- Responses appear in threads to keep channels organized
-- Error messages are user-friendly
+### Slack Experience
+
+Each agent identifies itself in responses:
+
+```
+[frontend] Here's the React component you requested...
+Session: a1b2c3d4... | Cost: $0.0042
+
+[backend] The API endpoint has been updated...
+Session: x9y8z7w6... | Cost: $0.0023
+```
+
+### Interaction Methods
+
+1. **Mention the bot**: `@claude-bot help me debug this function`
+2. **Slash command**: `/claude write a Python function to sort a list`  
+3. **Direct message**: `claude explain this error message`
+
+For detailed usage instructions, see [MULTI_AGENT_USAGE.md](MULTI_AGENT_USAGE.md).
 
 ## Development
 
