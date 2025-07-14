@@ -1,0 +1,22 @@
+{
+  "name": "claude-slack-bot",
+  "version": "1.0.0",
+  "description": "A Slack bot that wraps Claude Code CLI for team collaboration",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.17.1",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0"
+  },
+  "keywords": ["slack", "bot", "claude", "ai", "collaboration"],
+  "author": "",
+  "license": "MIT"
+}
