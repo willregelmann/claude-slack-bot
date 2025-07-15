@@ -41,9 +41,27 @@ claude-slack start --alias="my-project" --dir="."
 
 ### Slack App Configuration
 
+There are two ways to set up your Slack app:
+
+#### Option 1: Using App Manifest (Recommended)
+
+1. Go to https://api.slack.com/apps and click "Create New App"
+2. Choose "From an app manifest"
+3. Select your workspace
+4. Copy the contents of `manifest.yml` from this repository
+5. Replace `https://your-app-url.ngrok.io` with your actual app URL (use ngrok for local development)
+6. Paste the manifest and click "Next"
+7. Review the configuration and click "Create"
+8. Once created, go to "Basic Information" and install the app to your workspace
+9. Go to "OAuth & Permissions" and copy the Bot User OAuth Token (starts with `xoxb-`)
+10. Go to "Basic Information" > "App-Level Tokens" and create a token with `connections:write` scope
+11. Copy the App-Level Token (starts with `xapp-`)
+
+#### Option 2: Manual Configuration
+
 1. Create a new Slack app at https://api.slack.com/apps
-2. Enable Socket Mode and generate an App Token
-3. Add the following OAuth scopes:
+2. Enable Socket Mode under "Socket Mode" and generate an App Token with `connections:write` scope
+3. Add the following OAuth scopes under "OAuth & Permissions":
    - `app_mentions:read`
    - `chat:write`
    - `commands`
@@ -51,19 +69,27 @@ claude-slack start --alias="my-project" --dir="."
    - `groups:history`
    - `im:history`
    - `mpim:history`
+   - `channels:read`
+   - `groups:read`
+   - `im:read`
+   - `mpim:read`
+   - `users:read`
 
-4. Create a slash command:
+4. Create a slash command under "Slash Commands":
    - Command: `/claude`
+   - Request URL: `https://your-app-url/slack/events`
    - Description: "Interact with Claude Code"
 
-5. Subscribe to bot events:
-   - `app_mention`
-   - `message.channels`
-   - `message.groups`
-   - `message.im`
-   - `message.mpim`
+5. Subscribe to bot events under "Event Subscriptions":
+   - Request URL: `https://your-app-url/slack/events`
+   - Subscribe to bot events:
+     - `app_mention`
+     - `message.channels`
+     - `message.groups`
+     - `message.im`
+     - `message.mpim`
 
-6. Install the app to your workspace
+6. Install the app to your workspace from "Basic Information"
 
 ### Environment Variables
 
