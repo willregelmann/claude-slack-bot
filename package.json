@@ -1,7 +1,7 @@
 {
   "name": "claude-slack-bot",
   "version": "1.0.0",
-  "description": "A Slack bot that wraps Claude Code CLI for team collaboration",
+  "description": "A multi-agent Slack bot system that wraps Claude Code CLI for team collaboration",
   "main": "src/index.js",
   "bin": {
     "claude-slack": "./bin/claude-slack.js"
@@ -21,7 +21,19 @@
     "nodemon": "^3.0.2",
     "jest": "^29.7.0"
   },
-  "keywords": ["slack", "bot", "claude", "ai", "collaboration"],
-  "author": "",
-  "license": "MIT"
+  "keywords": ["slack", "bot", "claude", "ai", "collaboration", "multi-agent", "cli"],
+  "author": "Will Regelmann",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/willregelmann/claude-slack-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/willregelmann/claude-slack-bot/issues"
+  },
+  "homepage": "https://github.com/willregelmann/claude-slack-bot#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "preferGlobal": true
 }

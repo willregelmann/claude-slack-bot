@@ -21,24 +21,23 @@ A multi-agent Slack bot system that wraps Claude Code CLI, allowing teams to run
 - Claude Code CLI installed and configured
 - Slack workspace with admin permissions
 
-### Installation
+### Quick Installation
 
-1. Clone or create the project:
 ```bash
-mkdir claude-slack-bot
+# Install from GitHub
+git clone https://github.com/willregelmann/claude-slack-bot.git
 cd claude-slack-bot
-```
-
-2. Install dependencies:
-```bash
 npm install
+
+# One-time configuration setup
+claude-slack config setup
+# Enter your Slack app tokens when prompted
+
+# Start your first agent
+claude-slack start --alias="my-project" --dir="."
 ```
 
-3. Set up environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your Slack app credentials
-```
+**For detailed setup instructions, see [SETUP_GUIDE.md](SETUP_GUIDE.md)**
 
 ### Slack App Configuration
 

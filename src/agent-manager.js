@@ -2,10 +2,12 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs').promises;
 const os = require('os');
+const ConfigManager = require('./config-manager');
 
 class AgentManager {
   constructor() {
     this.configDir = path.join(os.homedir(), '.claude-slack-agents');
+    this.configManager = new ConfigManager();
     this.initializeConfigDir();
   }
 
@@ -49,29 +51,22 @@ class AgentManager {
       throw new Error(`Port ${port} is already in use by another agent`);
     }
 
-    // Prepare environment
-    const env = { ...process.env };
-    
-    // Load config file if specified
-    if (config) {
-      const configPath = path.resolve(config);
-      try {
-        const configContent = await fs.readFile(configPath, 'utf8');
-        const configLines = configContent.split('\n');
-        
-        configLines.forEach(line => {
-          const trimmed = line.trim();
-          if (trimmed && !trimmed.startsWith('#')) {
-            const [key, ...valueParts] = trimmed.split('=');
-            if (key && valueParts.length > 0) {
-              env[key.trim()] = valueParts.join('=').trim();
-            }
-          }
-        });
-      } catch (error) {
-        throw new Error(`Failed to load config file: ${error.message}`);
-      }
+    // Load configuration using the new config manager
+    let slackConfig;
+    try {
+      slackConfig = await this.configManager.getConfig({
+        workingDir: workingDir,
+        configFile: config
+      });
+    } catch (error) {
+      throw new Error(`Configuration error: ${error.message}`);
     }
+
+    // Prepare environment
+    const env = { 
+      ...process.env,
+      ...slackConfig
+    };
 
     // Set agent-specific environment variables
     env.CLAUDE_AGENT_ALIAS = alias;
