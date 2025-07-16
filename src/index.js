@@ -15,6 +15,9 @@ const app = new App({
 
 const claudeWrapper = new ClaudeWrapper(agentAlias, workingDir);
 
+// Track threads where the bot has responded
+const activeThreads = new Set();
+
 app.message(/^claude\s+(.*)/, async ({ message, say, context }) => {
   const prompt = context.matches[1];
   const userId = message.user;
@@ -49,6 +52,9 @@ app.message(/^claude\s+(.*)/, async ({ message, say, context }) => {
       text: responseText,
       thread_ts: threadTs
     });
+    
+    // Track this thread as active
+    activeThreads.add(threadTs);
   } catch (error) {
     console.error('Error processing Claude command:', error);
     await say({
@@ -136,8 +142,92 @@ app.event('app_mention', async ({ event, say }) => {
       text: responseText,
       thread_ts: threadTs
     });
+    
+    // Track this thread as active
+    activeThreads.add(threadTs);
   } catch (error) {
     console.error('Error processing app mention:', error);
+    await say({
+      text: `Sorry, I encountered an error: ${error.message}`,
+      thread_ts: threadTs
+    });
+  }
+});
+
+// Handle messages in threads where the bot is already active
+app.message(async ({ message, say, next }) => {
+  // Only respond to messages in threads we're already participating in
+  if (!message.thread_ts) {
+    return next();
+  }
+  
+  // Check if this thread is active or has an existing session
+  const hasActiveThread = activeThreads.has(message.thread_ts);
+  const threadStatus = claudeWrapper.getSessionStatus({
+    userId: message.user,
+    channel: message.channel,
+    threadTs: message.thread_ts
+  });
+  
+  if (!hasActiveThread && !threadStatus.hasSession) {
+    return next();
+  }
+  
+  // Skip if it's a bot message
+  if (message.bot_id) {
+    return next();
+  }
+  
+  // Skip if it matches other patterns (claude command, session commands)
+  if (message.text?.match(/^claude\s+/) || 
+      message.text?.match(/^(?:claude\s+)?session\s+/)) {
+    return next();
+  }
+  
+  // Skip if it contains a mention (will be handled by app_mention)
+  if (message.text?.includes('<@')) {
+    return next();
+  }
+  
+  // Process as a follow-up in the thread
+  const prompt = message.text;
+  const userId = message.user;
+  const threadTs = message.thread_ts;
+  
+  try {
+    await say({
+      text: 'Processing your request...',
+      thread_ts: threadTs
+    });
+
+    const response = await claudeWrapper.executeCommand(prompt, {
+      userId,
+      channel: message.channel,
+      threadTs: threadTs,
+      prompt
+    });
+
+    let responseText = response.text || response;
+    
+    // Add agent identification and session info
+    let footer = `\n\n_[${agentAlias}]_`;
+    if (response.sessionId) {
+      footer += ` | _Session: ${response.sessionId.substring(0, 8)}..._`;
+      if (response.cost) {
+        footer += ` | _Cost: $${response.cost.toFixed(4)}_`;
+      }
+    }
+    responseText += footer;
+
+    await say({
+      text: responseText,
+      thread_ts: threadTs
+    });
+    
+    // Keep thread active
+    activeThreads.add(threadTs);
+  } catch (error) {
+    console.error('Error processing thread message:', error);
     await say({
       text: `Sorry, I encountered an error: ${error.message}`,
       thread_ts: threadTs
@@ -161,6 +251,9 @@ app.message(/^(?:claude\s+)?session\s+(new|start)/, async ({ message, say }) => 
       text: `🆕 Started a new Claude session!\n\n${response.text}\n\n_[${agentAlias}] | Session: ${response.sessionId.substring(0, 8)}..._`,
       thread_ts: threadTs
     });
+    
+    // Track this thread as active
+    activeThreads.add(threadTs);
   } catch (error) {
     console.error('Error starting new session:', error);
     await say({
@@ -193,6 +286,9 @@ app.message(/^(?:claude\s+)?session\s+continue/, async ({ message, say }) => {
       text: `🔄 Continuing your previous session (${status.sessionId.substring(0, 8)}...).\n\nWhat would you like me to help you with?\n\n_[${agentAlias}]_`,
       thread_ts: threadTs
     });
+    
+    // Track this thread as active
+    activeThreads.add(threadTs);
   } catch (error) {
     console.error('Error continuing session:', error);
     await say({
@@ -254,6 +350,9 @@ app.message(/^(?:claude\s+)?session\s+resume\s+([a-f0-9-]+)/, async ({ message, 
       text: `🔄 Resuming session ${sessionId.substring(0, 8)}...\n\nWhat would you like me to help you with?`,
       thread_ts: threadTs
     });
+    
+    // Track this thread as active
+    activeThreads.add(threadTs);
   } catch (error) {
     console.error('Error resuming session:', error);
     await say({

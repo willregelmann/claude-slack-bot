@@ -11,6 +11,21 @@ class AgentManager {
     this.initializeConfigDir();
   }
 
+  async isServiceRunning() {
+    try {
+      const { spawn } = require('child_process');
+      return new Promise((resolve) => {
+        const child = spawn('systemctl', ['is-active', 'claude-slack'], { stdio: 'pipe' });
+        child.on('close', (code) => {
+          resolve(code === 0);
+        });
+        child.on('error', () => resolve(false));
+      });
+    } catch (error) {
+      return false;
+    }
+  }
+
   async initializeConfigDir() {
     try {
       await fs.mkdir(this.configDir, { recursive: true });
@@ -97,7 +112,9 @@ class AgentManager {
       startedAt: new Date().toISOString(),
       logFile,
       running: true,
-      configFile: config
+      configFile: config,
+      managedBy: 'cli', // Track who started this agent
+      manualStop: false // Track if manually stopped to prevent auto-restart
     };
 
     await this.saveAgentConfig(alias, agentConfig);
@@ -135,6 +152,7 @@ class AgentManager {
     // Update config
     config.running = false;
     config.stoppedAt = new Date().toISOString();
+    config.manualStop = true; // Prevent service from auto-restarting
     await this.saveAgentConfig(alias, config);
 
     return true;
@@ -164,11 +182,12 @@ class AgentManager {
       const agents = [];
 
       for (const file of files) {
-        if (file.endsWith('.json')) {
+        // Only process JSON files that are not system files
+        if (file.endsWith('.json') && !file.startsWith('service-')) {
           try {
             const alias = file.replace('.json', '');
             const config = await this.getAgentConfig(alias);
-            if (config) {
+            if (config && config.alias) {
               // Check if process is actually running
               config.running = await this.isProcessRunning(config.pid);
               agents.push(config);
@@ -179,8 +198,14 @@ class AgentManager {
         }
       }
 
-      return agents.sort((a, b) => a.alias.localeCompare(b.alias));
+      return agents.sort((a, b) => {
+        // Safely handle sorting with fallback for missing alias
+        const aliasA = a.alias || '';
+        const aliasB = b.alias || '';
+        return aliasA.localeCompare(aliasB);
+      });
     } catch (error) {
+      console.error('Error in listAgents:', error);
       return [];
     }
   }

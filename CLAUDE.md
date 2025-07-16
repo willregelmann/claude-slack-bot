@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Multi-Agent CLI Commands
+
+```bash
+# Agent management
+claude-slack start --alias="project-name" --dir="/path/to/project" --port=3000
+claude-slack list
+claude-slack stop project-name
+claude-slack status project-name
+claude-slack logs project-name -f
+
+# Configuration
+claude-slack config setup
+claude-slack config show
+
+# System service
+./install-service.sh
+sudo systemctl start claude-slack
+```
+
 ## Development Commands
 
 ```bash
@@ -11,14 +30,12 @@ npm install
 # Development with auto-reload
 npm run dev
 
-# Production start
-npm start
-
 # Run tests
 npm test
 
-# Test Claude wrapper functionality
-node test.js
+# Test system
+claude-slack test
+claude-slack doctor
 ```
 
 ## Environment Setup
@@ -31,16 +48,29 @@ Copy `.env.example` to `.env` and configure Slack app credentials:
 
 ## Architecture Overview
 
-This is a Slack bot that wraps Claude Code CLI to enable team collaboration through Slack. The architecture consists of two main components:
+This is a multi-agent Slack bot system that wraps Claude Code CLI to enable team collaboration through Slack. The architecture supports multiple independent Claude assistants, each running in different project directories.
 
 ### Core Components
 
-**`src/index.js`** - Main Slack Bot Application
+**`bin/claude-slack.js`** - Multi-Agent CLI Manager
+- Command-line interface for managing multiple Claude agents
+- Agent lifecycle management (start, stop, list, status, logs)
+- Configuration management and system diagnostics
+- Template-based agent creation
+
+**`src/agent-manager.js`** - Agent Process Manager
+- Spawns and manages individual Claude Slack bot processes
+- Handles agent configuration and state persistence
+- Port allocation and conflict detection
+- Process monitoring and cleanup
+
+**`src/index.js`** - Individual Slack Bot Application
 - Uses Slack Bolt framework with Socket Mode
-- Handles three interaction patterns:
+- Handles multiple interaction patterns:
   - Direct messages starting with "claude"
   - Slash command `/claude`
-  - App mentions `@claude-bot`
+  - App mentions `@Claude Bot`
+  - Thread continuity (auto-responds in active threads)
 - Implements session management commands (new, continue, list, status, clear, resume)
 - Thread-based conversation isolation using `thread_ts`
 
@@ -53,6 +83,12 @@ This is a Slack bot that wraps Claude Code CLI to enable team collaboration thro
 - Persists session metadata to `~/.claude-slack-bot-sessions/` for bot restarts
 - Auto-detects and formats code responses with syntax highlighting
 
+**`claude-slack-service.js`** - System Service Manager
+- Systemd service for production deployment
+- Automatically saves and restores agent state across reboots
+- Monitors agent health and provides graceful shutdown
+- Coordinates with CLI to prevent conflicts
+
 ### Session Management Architecture
 
 The bot maintains conversation context through a sophisticated session system:
@@ -64,9 +100,20 @@ The bot maintains conversation context through a sophisticated session system:
 
 ### Key Interaction Patterns
 
+- **Thread Continuity**: After initial mention/command, bot auto-responds to follow-up messages in the same thread
 - **Auto Mode**: Default behavior that maintains context within threads
 - **Manual Session Control**: Explicit commands for session management
 - **Cross-Thread Resumption**: Ability to resume any previous session in new threads
+- **Multi-Agent Context**: Each agent operates in its own project directory with separate sessions
+
+### Agent Coordination
+
+The system coordinates between CLI and service management:
+
+1. **Agent Ownership**: Tracks whether agent was started by CLI or service (`managedBy` field)
+2. **Manual Stop Protection**: CLI-stopped agents marked with `manualStop: true` to prevent auto-restart
+3. **Service Persistence**: Service automatically saves/restores running agents across reboots
+4. **State Synchronization**: Both CLI and service respect each other's agent management
 
 ## Claude CLI Integration
 
@@ -76,13 +123,28 @@ The wrapper uses Claude Code CLI with these key parameters:
 - `--resume <sessionId>` for cross-session continuity
 - `TERM=dumb` environment to avoid terminal formatting issues
 
-## Testing
+## Testing and Diagnostics
 
-Run `node test.js` to verify:
-- Basic Claude wrapper functionality
-- Code detection and formatting
+```bash
+# Test system dependencies and configuration
+claude-slack test --dir="/path/to/project"
+
+# Run comprehensive diagnostics
+claude-slack doctor
+
+# Test individual agent functionality
+node test.js
+```
+
+Verifies:
+- Node.js version compatibility
+- Claude CLI availability and functionality
+- Slack configuration validity
+- Network connectivity to Slack servers
+- Working directory permissions
+- Agent process management
 - Session management capabilities
-- Error handling
+- Code detection and formatting
 
 ## Security Notes
 

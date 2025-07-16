@@ -13,15 +13,24 @@
   },
   "dependencies": {
     "@slack/bolt": "^3.17.1",
-    "dotenv": "^16.3.1",
+    "chalk": "^4.1.2",
     "commander": "^11.1.0",
-    "chalk": "^4.1.2"
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
-    "jest": "^29.7.0"
+    "@slack/cli-hooks": "^1.2.1",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2"
   },
-  "keywords": ["slack", "bot", "claude", "ai", "collaboration", "multi-agent", "cli"],
+  "keywords": [
+    "slack",
+    "bot",
+    "claude",
+    "ai",
+    "collaboration",
+    "multi-agent",
+    "cli"
+  ],
   "author": "Will Regelmann",
   "license": "MIT",
   "repository": {

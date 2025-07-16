@@ -1,0 +1,39 @@
+[Unit]
+Description=Claude Slack Multi-Agent Service
+Documentation=https://github.com/willregelmann/claude-slack-bot
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=will
+Group=will
+WorkingDirectory=/home/will/Projects/claude-slack-bot
+ExecStart=/usr/bin/node /home/will/Projects/claude-slack-bot/claude-slack-service.js
+ExecReload=/bin/kill -USR1 $MAINPID
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+# Environment
+Environment="NODE_ENV=production"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=claude-slack
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ReadWritePaths=/home/will/.claude-slack-agents /home/will/.claude-slack-bot-sessions
+
+# Process management
+KillMode=mixed
+KillSignal=SIGTERM
+
+[Install]
+WantedBy=multi-user.target
