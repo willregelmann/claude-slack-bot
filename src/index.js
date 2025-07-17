@@ -1,10 +1,10 @@
 require('dotenv').config();
 const { App } = require('@slack/bolt');
-const ClaudeWrapper = require('./claude-wrapper');
+const ClaudeClient = require('./claude-client');
 
-// Get agent configuration from environment
-const agentAlias = process.env.CLAUDE_AGENT_ALIAS || 'claude';
-const workingDir = process.env.CLAUDE_AGENT_WORKING_DIR || process.cwd();
+// Get configuration from environment
+const botName = process.env.CLAUDE_BOT_NAME || 'Claude';
+const workingDir = process.env.CLAUDE_WORKING_DIR || process.cwd();
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -13,15 +13,38 @@ const app = new App({
   socketMode: true,
 });
 
-const claudeWrapper = new ClaudeWrapper(agentAlias, workingDir);
+const claudeClient = new ClaudeClient(workingDir);
 
 // Track threads where the bot has responded
 const activeThreads = new Set();
 
-app.message(/^claude\s+(.*)/, async ({ message, say, context }) => {
-  const prompt = context.matches[1];
+// Handle all direct messages and messages in channels/threads where bot should respond
+app.message(async ({ message, say, next }) => {
+  // Skip if it's a bot message
+  if (message.bot_id) {
+    return next();
+  }
+  
+  // Skip if it contains a mention (will be handled by app_mention)
+  if (message.text?.includes('<@')) {
+    return next();
+  }
+  
+  // Skip if it's a session command (handled by specific session handlers)
+  if (message.text?.match(/^(?:claude\s+)?session\s+/)) {
+    return next();
+  }
+
   const userId = message.user;
   const threadTs = message.thread_ts || message.ts;
+  const prompt = message.text;
+  
+  // Determine if we should respond to this message
+  const shouldRespond = await determineIfShouldRespond(message, userId, threadTs);
+  
+  if (!shouldRespond) {
+    return next();
+  }
   
   try {
     await say({
@@ -29,17 +52,16 @@ app.message(/^claude\s+(.*)/, async ({ message, say, context }) => {
       thread_ts: threadTs
     });
 
-    const response = await claudeWrapper.executeCommand(prompt, {
+    const response = await claudeClient.executeCommand(prompt, {
       userId,
       channel: message.channel,
-      threadTs: threadTs,
-      prompt
+      threadTs: threadTs
     });
 
     let responseText = response.text || response;
     
-    // Add agent identification and session info
-    let footer = `\n\n_[${agentAlias}]_`;
+    // Add bot identification and session info
+    let footer = `\n\n_[${botName}]_`;
     if (response.sessionId) {
       footer += ` | _Session: ${response.sessionId.substring(0, 8)}..._`;
       if (response.cost) {
@@ -56,7 +78,7 @@ app.message(/^claude\s+(.*)/, async ({ message, say, context }) => {
     // Track this thread as active
     activeThreads.add(threadTs);
   } catch (error) {
-    console.error('Error processing Claude command:', error);
+    console.error('Error processing message:', error);
     await say({
       text: `Sorry, I encountered an error: ${error.message}`,
       thread_ts: threadTs
@@ -64,42 +86,34 @@ app.message(/^claude\s+(.*)/, async ({ message, say, context }) => {
   }
 });
 
-app.command('/claude', async ({ command, ack, respond }) => {
-  await ack();
+// Helper function to determine if bot should respond
+async function determineIfShouldRespond(message, userId, threadTs) {
+  // Always respond to direct messages (DMs)
+  if (message.channel_type === 'im') {
+    return true;
+  }
   
-  const prompt = command.text;
-  if (!prompt) {
-    await respond('Please provide a prompt. Usage: `/claude <your prompt>`');
-    return;
+  // Respond in threads where bot is already active
+  if (message.thread_ts && activeThreads.has(message.thread_ts)) {
+    return true;
   }
-
-  try {
-    await respond('Processing your request...');
-    
-    const response = await claudeWrapper.executeCommand(prompt, {
-      userId: command.user_id,
-      channel: command.channel_id,
-      prompt
+  
+  // Respond in threads where bot has an existing session
+  if (message.thread_ts) {
+    const threadStatus = claudeClient.getSessionStatus({
+      userId,
+      channel: message.channel,
+      threadTs: message.thread_ts
     });
-
-    let responseText = response.text || response;
-    
-    // Add agent identification and session info
-    let footer = `\n\n_[${agentAlias}]_`;
-    if (response.sessionId) {
-      footer += ` | _Session: ${response.sessionId.substring(0, 8)}..._`;
-      if (response.cost) {
-        footer += ` | _Cost: $${response.cost.toFixed(4)}_`;
-      }
+    if (threadStatus.hasSession) {
+      return true;
     }
-    responseText += footer;
-
-    await respond(responseText);
-  } catch (error) {
-    console.error('Error processing Claude slash command:', error);
-    await respond(`Sorry, I encountered an error: ${error.message}`);
   }
-});
+  
+  // Don't respond to general channel messages unless explicitly mentioned
+  return false;
+}
+
 
 app.event('app_mention', async ({ event, say }) => {
   const prompt = event.text.replace(/<@[^>]+>/, '').trim();
@@ -119,17 +133,16 @@ app.event('app_mention', async ({ event, say }) => {
       thread_ts: threadTs
     });
 
-    const response = await claudeWrapper.executeCommand(prompt, {
+    const response = await claudeClient.executeCommand(prompt, {
       userId: event.user,
       channel: event.channel,
-      threadTs: threadTs,
-      prompt
+      threadTs: threadTs
     });
 
     let responseText = response.text || response;
     
     // Add agent identification and session info
-    let footer = `\n\n_[${agentAlias}]_`;
+    let footer = `\n\n_[${botName}]_`;
     if (response.sessionId) {
       footer += ` | _Session: ${response.sessionId.substring(0, 8)}..._`;
       if (response.cost) {
@@ -154,86 +167,6 @@ app.event('app_mention', async ({ event, say }) => {
   }
 });
 
-// Handle messages in threads where the bot is already active
-app.message(async ({ message, say, next }) => {
-  // Only respond to messages in threads we're already participating in
-  if (!message.thread_ts) {
-    return next();
-  }
-  
-  // Check if this thread is active or has an existing session
-  const hasActiveThread = activeThreads.has(message.thread_ts);
-  const threadStatus = claudeWrapper.getSessionStatus({
-    userId: message.user,
-    channel: message.channel,
-    threadTs: message.thread_ts
-  });
-  
-  if (!hasActiveThread && !threadStatus.hasSession) {
-    return next();
-  }
-  
-  // Skip if it's a bot message
-  if (message.bot_id) {
-    return next();
-  }
-  
-  // Skip if it matches other patterns (claude command, session commands)
-  if (message.text?.match(/^claude\s+/) || 
-      message.text?.match(/^(?:claude\s+)?session\s+/)) {
-    return next();
-  }
-  
-  // Skip if it contains a mention (will be handled by app_mention)
-  if (message.text?.includes('<@')) {
-    return next();
-  }
-  
-  // Process as a follow-up in the thread
-  const prompt = message.text;
-  const userId = message.user;
-  const threadTs = message.thread_ts;
-  
-  try {
-    await say({
-      text: 'Processing your request...',
-      thread_ts: threadTs
-    });
-
-    const response = await claudeWrapper.executeCommand(prompt, {
-      userId,
-      channel: message.channel,
-      threadTs: threadTs,
-      prompt
-    });
-
-    let responseText = response.text || response;
-    
-    // Add agent identification and session info
-    let footer = `\n\n_[${agentAlias}]_`;
-    if (response.sessionId) {
-      footer += ` | _Session: ${response.sessionId.substring(0, 8)}..._`;
-      if (response.cost) {
-        footer += ` | _Cost: $${response.cost.toFixed(4)}_`;
-      }
-    }
-    responseText += footer;
-
-    await say({
-      text: responseText,
-      thread_ts: threadTs
-    });
-    
-    // Keep thread active
-    activeThreads.add(threadTs);
-  } catch (error) {
-    console.error('Error processing thread message:', error);
-    await say({
-      text: `Sorry, I encountered an error: ${error.message}`,
-      thread_ts: threadTs
-    });
-  }
-});
 
 // Session management commands
 app.message(/^(?:claude\s+)?session\s+(new|start)/, async ({ message, say }) => {
@@ -241,14 +174,14 @@ app.message(/^(?:claude\s+)?session\s+(new|start)/, async ({ message, say }) => 
   const threadTs = message.thread_ts || message.ts;
   
   try {
-    const response = await claudeWrapper.startNewSession({
+    const response = await claudeClient.startNewSession({
       userId,
       channel: message.channel,
       threadTs: threadTs
     });
 
     await say({
-      text: `🆕 Started a new Claude session!\n\n${response.text}\n\n_[${agentAlias}] | Session: ${response.sessionId.substring(0, 8)}..._`,
+      text: `🆕 Started a new Claude session!\n\n${response.text}\n\n_[${botName}] | Session: ${response.sessionId.substring(0, 8)}..._`,
       thread_ts: threadTs
     });
     
@@ -268,7 +201,7 @@ app.message(/^(?:claude\s+)?session\s+continue/, async ({ message, say }) => {
   const threadTs = message.thread_ts || message.ts;
   
   try {
-    const status = claudeWrapper.getSessionStatus({
+    const status = claudeClient.getSessionStatus({
       userId,
       channel: message.channel,
       threadTs: threadTs
@@ -283,7 +216,7 @@ app.message(/^(?:claude\s+)?session\s+continue/, async ({ message, say }) => {
     }
 
     await say({
-      text: `🔄 Continuing your previous session (${status.sessionId.substring(0, 8)}...).\n\nWhat would you like me to help you with?\n\n_[${agentAlias}]_`,
+      text: `🔄 Continuing your previous session (${status.sessionId.substring(0, 8)}...).\n\nWhat would you like me to help you with?\n\n_[${botName}]_`,
       thread_ts: threadTs
     });
     
@@ -303,7 +236,7 @@ app.message(/^(?:claude\s+)?session\s+list/, async ({ message, say }) => {
   const threadTs = message.thread_ts || message.ts;
   
   try {
-    const sessions = await claudeWrapper.listUserSessions(userId, message.channel);
+    const sessions = await claudeClient.listUserSessions(userId, message.channel);
     
     if (sessions.length === 0) {
       await say({
@@ -340,7 +273,7 @@ app.message(/^(?:claude\s+)?session\s+resume\s+([a-f0-9-]+)/, async ({ message, 
   
   try {
     // Update the session mapping to use this resumed session
-    await claudeWrapper.setActiveSession(sessionId, {
+    await claudeClient.setActiveSession(sessionId, {
       userId,
       channel: message.channel,
       threadTs: threadTs
@@ -367,7 +300,7 @@ app.message(/^(?:claude\s+)?session\s+status/, async ({ message, say }) => {
   const threadTs = message.thread_ts || message.ts;
   
   try {
-    const status = claudeWrapper.getSessionStatus({
+    const status = claudeClient.getSessionStatus({
       userId,
       channel: message.channel,
       threadTs: threadTs
@@ -405,11 +338,11 @@ app.message(/^(?:claude\s+)?session\s+clear/, async ({ message, say }) => {
     let cleared = false;
     
     if (threadTs) {
-      cleared = await claudeWrapper.clearThreadSession(threadTs);
+      cleared = await claudeClient.clearThreadSession(threadTs);
     }
     
     if (!cleared) {
-      cleared = await claudeWrapper.clearUserSession(userId, message.channel);
+      cleared = await claudeClient.clearUserSession(userId, message.channel);
     }
 
     if (cleared) {
@@ -436,8 +369,10 @@ app.message(/^(?:claude\s+)?session\s+clear/, async ({ message, say }) => {
   try {
     const port = process.env.PORT || 3000;
     await app.start(port);
-    console.log(`⚡️ Claude Slack Bot "${agentAlias}" is running on port ${port}!`);
+    console.log(`⚡️ Claude Slack Bot "${botName}" is running on port ${port}!`);
     console.log(`📁 Working directory: ${workingDir}`);
+    console.log(`🔧 Claude Code SDK integration enabled`);
+    console.log(`🚀 MCP Server support: claude-fleet (if available)`);
   } catch (error) {
     console.error('Failed to start the bot:', error);
     process.exit(1);

@@ -1,0 +1,99 @@
+name: Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [16.x, 18.x, 20.x]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run unit tests
+      run: npm run test:unit
+    
+    - name: Generate coverage report
+      run: npm run test:coverage
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        flags: unittests
+        name: codecov-umbrella
+
+  integration-tests:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check for Claude Code CLI
+      run: |
+        if command -v claude-code &> /dev/null; then
+          echo "Claude Code CLI found, will run integration tests"
+          echo "CLAUDE_CLI_AVAILABLE=true" >> $GITHUB_ENV
+        else
+          echo "Claude Code CLI not found, will skip integration tests"
+          echo "CLAUDE_CLI_AVAILABLE=false" >> $GITHUB_ENV
+        fi
+    
+    - name: Run integration tests
+      run: npm run test:integration
+      # Tests will automatically skip if Claude CLI not available
+    
+    - name: Run E2E tests  
+      run: npm run test:e2e
+      # Tests will automatically skip if Claude CLI not available
+
+  lint-and-format:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Use Node.js 18.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 18.x
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Check code formatting
+      run: |
+        # Add prettier or other formatting checks
+        echo "Code formatting checks would go here"
+    
+    - name: Run linting
+      run: |
+        # Add ESLint or other linting
+        echo "Linting checks would go here"
